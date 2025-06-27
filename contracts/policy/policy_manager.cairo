@@ -1,0 +1,154 @@
+#[starknet::contract]
+mod PolicyManager {
+    use openzeppelin::access::ownable::OwnableComponent;
+    use openzeppelin::security::reentrancyguard::ReentrancyGuardComponent;
+    use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
+    use stark_insured::errors::PolicyErrors;
+    use stark_insured::events::{PolicyCreated, PremiumPaid};
+    use stark_insured::interfaces::{IPolicyManager, Policy};
+    use stark_insured::{constants, utils};
+    use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
+
+    component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
+    component!(
+        path: ReentrancyGuardComponent, storage: reentrancy_guard, event: ReentrancyGuardEvent,
+    );
+
+    #[abi(embed_v0)]
+    impl OwnableImpl = OwnableComponent::OwnableImpl<ContractState>;
+    impl OwnableInternalImpl = OwnableComponent::InternalImpl<ContractState>;
+
+    #[storage]
+    struct Storage {
+        policies: LegacyMap<u256, Policy>,
+        policy_counter: u256,
+        premium_token: ContractAddress,
+        #[substorage(v0)]
+        ownable: OwnableComponent::Storage,
+        #[substorage(v0)]
+        reentrancy_guard: ReentrancyGuardComponent::Storage,
+    }
+
+    #[event]
+    #[derive(Drop, starknet::Event)]
+    enum Event {
+        PolicyCreated: PolicyCreated,
+        PremiumPaid: PremiumPaid,
+        #[flat]
+        OwnableEvent: OwnableComponent::Event,
+        #[flat]
+        ReentrancyGuardEvent: ReentrancyGuardComponent::Event,
+    }
+
+    #[constructor]
+    fn constructor(
+        ref self: ContractState, owner: ContractAddress, premium_token: ContractAddress,
+    ) {
+        self.ownable.initializer(owner);
+        self.premium_token.write(premium_token);
+        self.policy_counter.write(0);
+    }
+
+    #[abi(embed_v0)]
+    impl PolicyManagerImpl of IPolicyManager<ContractState> {
+        fn create_policy(
+            ref self: ContractState,
+            policy_holder: ContractAddress,
+            coverage_amount: u256,
+            duration: u64,
+            policy_type: u8,
+        ) -> u256 {
+            // Validation
+            assert(utils::is_valid_address(policy_holder), PolicyErrors::UNAUTHORIZED_ACCESS);
+            assert(
+                coverage_amount >= constants::MIN_COVERAGE_AMOUNT
+                    && coverage_amount <= constants::MAX_COVERAGE_AMOUNT,
+                PolicyErrors::INVALID_COVERAGE_AMOUNT,
+            );
+            assert(duration > 0, PolicyErrors::INVALID_DURATION);
+
+            let policy_id = self.policy_counter.read() + 1;
+            self.policy_counter.write(policy_id);
+
+            let current_time = get_block_timestamp();
+            let premium = self.calculate_premium(coverage_amount, duration, policy_type);
+
+            let policy = Policy {
+                id: policy_id,
+                holder: policy_holder,
+                coverage_amount,
+                premium,
+                start_time: current_time,
+                end_time: current_time + duration,
+                policy_type,
+                is_active: true,
+            };
+
+            self.policies.write(policy_id, policy);
+
+            self
+                .emit(
+                    PolicyCreated {
+                        policy_id, holder: policy_holder, coverage_amount, premium, policy_type,
+                    },
+                );
+
+            policy_id
+        }
+
+        fn get_policy(self: @ContractState, policy_id: u256) -> Policy {
+            let policy = self.policies.read(policy_id);
+            assert(policy.id != 0, PolicyErrors::POLICY_NOT_FOUND);
+            policy
+        }
+
+        fn pay_premium(ref self: ContractState, policy_id: u256, amount: u256) {
+            self.reentrancy_guard.start();
+
+            let policy = self.get_policy(policy_id);
+            let caller = get_caller_address();
+
+            assert(policy.holder == caller, PolicyErrors::UNAUTHORIZED_ACCESS);
+            assert(amount >= policy.premium, PolicyErrors::INSUFFICIENT_PREMIUM);
+
+            let token = IERC20Dispatcher { contract_address: self.premium_token.read() };
+            token.transfer_from(caller, starknet::get_contract_address(), amount);
+
+            self.emit(PremiumPaid { policy_id, payer: caller, amount });
+
+            self.reentrancy_guard.end();
+        }
+
+        fn is_policy_active(self: @ContractState, policy_id: u256) -> bool {
+            let policy = self.policies.read(policy_id);
+            if policy.id == 0 {
+                return false;
+            }
+
+            let current_time = get_block_timestamp();
+            policy.is_active && current_time <= policy.end_time
+        }
+
+        fn calculate_premium(
+            self: @ContractState, coverage_amount: u256, duration: u64, policy_type: u8,
+        ) -> u256 {
+            let base_premium = (coverage_amount * constants::BASE_PREMIUM_RATE) / 10000;
+            let duration_factor = duration.into() / constants::SECONDS_IN_DAY.into();
+
+            // Type-specific multipliers
+            let type_multiplier = match policy_type {
+                1 => 120, // Health: 20% higher
+                2 => 150, // Auto: 50% higher
+                3 => 110, // Property: 10% higher
+                4 => 200, // Life: 100% higher
+                _ => 100 // Default
+            };
+
+            (base_premium * duration_factor * type_multiplier.into()) / 100
+        }
+
+        fn get_total_policies(self: @ContractState) -> u256 {
+            self.policy_counter.read()
+        }
+    }
+}

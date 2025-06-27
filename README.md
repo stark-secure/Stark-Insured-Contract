@@ -1,54 +1,85 @@
-Stark Insured Contracts
-Stark Insured Contracts is the Cairo-based smart contract suite for Stark Insured — a decentralized insurance platform built on the StarkNet ecosystem. These contracts power critical components like policy issuance, claim verification, settlement processing, and DAO-based governance in a trustless and transparent manner.
+# 🛡️ Stark Insured - Decentralized Insurance Protocol
 
-🧾 Overview
-Stark Insured offers next-gen decentralized insurance using smart contracts to eliminate intermediaries and bring fairness, automation, and fraud prevention to risk protection. The contract layer is built with Cairo, optimized for StarkNet’s scalability and zero-knowledge security.
+**Trustless insurance infrastructure built on StarkNet for the decentralized future.**
 
-📁 Project Structure
-starkinsured_contracts/
-├── README.md
-├── Scarb.lock              # Dependency lockfile
-├── Scarb.toml              # Project config
-├── snfoundry.toml          # SNFoundry testing config
+[![Build Status](https://github.com/stark-insured/contracts/workflows/CI/badge.svg)](https://github.com/stark-insured/contracts/actions)
+[![Coverage](https://codecov.io/gh/stark-insured/contracts/branch/main/graph/badge.svg)](https://codecov.io/gh/stark-insured/contracts)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+## 🌟 Overview
+
+Stark Insured is a decentralized insurance protocol that enables trustless policy creation, claim processing, and risk management on StarkNet. Built with Cairo smart contracts, it provides a transparent, efficient, and secure alternative to traditional insurance models.
+
+### 🔑 Key Features
+
+- **📋 Policy Management**: Create and manage insurance policies with flexible terms
+- **🔍 Claims Processing**: Automated claim verification and payout system
+- **💰 Risk Pools**: Community-driven risk sharing and liquidity provision
+- **🏛️ DAO Governance**: Decentralized governance for protocol upgrades and decisions
+- **🛡️ Fraud Prevention**: Built-in security measures and cooldown periods
+- **📊 Oracle Integration**: External data feeds for claim validation
+
+## 🏗️ Architecture
+
+\`\`\`
+├── contracts/
+│   ├── policy/          # Insurance policy management
+│   ├── claims/          # Claim processing and validation
+│   ├── pools/           # Risk pool management
+│   └── dao/             # DAO governance system
 ├── src/
-│   ├── base/
-│   │   └── types.cairo     # Shared type definitions
-│   ├── starkinsured/
-│   │   └── Policy.cairo    # Main insurance policy logic
-│   ├── interfaces/
-│   │   └── IPolicy.cairo   # Interface declarations
-│   └── lib.cairo           # Core contract library
-└── tests/
-    └── test_Policy.cairo   # Unit tests for Policy contract
-🧰 Prerequisites
-Scarb – Cairo package manager
+│   ├── interfaces.cairo # Contract interfaces
+│   ├── constants.cairo  # System constants
+│   ├── events.cairo     # Event definitions
+│   ├── errors.cairo     # Error handling
+│   └── utils.cairo      # Utility functions
+├── tests/               # Test suites
+├── scripts/             # Build and deployment scripts
+└── docs/                # Documentation
+\`\`\`
 
-SNFoundry – Testing framework for StarkNet
+## 🚀 Quick Start
 
-⚙️ Installation
-Clone the repository and install dependencies:
+### Prerequisites
 
-git clone https://github.com/Stark-Insured/starkinsured_contracts.git
-cd starkinsured_contracts
-🔐 Contract Overview
-🛡️ Policy Contract
-The Policy contract is the heart of Stark Insured. It handles:
+- [Cairo](https://book.cairo-lang.org/ch01-01-installation.html) >= 2.4.0
+- [Scarb](https://docs.swmansion.com/scarb/download.html) >= 2.4.0
+- [Starknet Foundry](https://foundry-rs.github.io/starknet-foundry/getting-started/installation.html)
 
-Policy Creation – Issue new coverage contracts
+### Installation
 
-Claim Verification – Use oracles to validate claims
+1. **Clone the repository**
+\`\`\`bash
+git clone https://github.com/stark-insured/contracts.git
+cd contracts
+\`\`\`
 
-Claim Settlement – Automate payouts and resolutions
-
-Role-based Access – Insurers, claimants, verifiers
-
-Risk Pooling – Decentralized coverage fund logic
-
-🏗️ Building the Project
-Compile all contracts using Scarb:
-
+2. **Install dependencies**
+\`\`\`bash
 scarb build
-🧪 Testing
-Run all unit tests using SNFoundry:
+\`\`\`
 
-snforge test
+3. **Run tests**
+\`\`\`bash
+./scripts/test.sh
+\`\`\`
+
+4. **Deploy to testnet**
+\`\`\`bash
+./scripts/deploy.sh testnet
+\`\`\`
+
+## 📖 Usage
+
+### Creating a Policy
+
+```cairo
+use stark_insured::interfaces::{IPolicyManagerDispatcher, IPolicyManagerDispatcherTrait};
+
+let policy_manager = IPolicyManagerDispatcher { contract_address };
+let policy_id = policy_manager.create_policy(
+    holder_address,
+    1000000000000000000000, // 1000 tokens coverage
+    86400 * 365,             // 1 year duration
+    HEALTH_INSURANCE         // Policy type
+);
