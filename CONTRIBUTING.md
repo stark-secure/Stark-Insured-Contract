@@ -22,5 +22,3 @@ StarkWare for StarkNet and Cairo
 SNFoundry for the robust StarkNet testing tools
 
 The global Web3 and DeFi communities
-
-

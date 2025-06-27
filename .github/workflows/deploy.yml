@@ -1,0 +1,50 @@
+name: Deploy
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      network:
+        description: 'Network to deploy to'
+        required: true
+        default: 'testnet'
+        type: choice
+        options:
+        - testnet
+        - mainnet
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.network || 'testnet' }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        curl -L https://github.com/starkware-libs/cairo/releases/download/v2.4.0/cairo-lang-2.4.0-x86_64-unknown-linux-musl.tar.gz | tar -xz
+        echo "$PWD/cairo-lang-2.4.0/bin" >> $GITHUB_PATH
+        curl --proto '=https' --tlsv1.2 -sSf https://docs.swmansion.com/scarb/install.sh | sh
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+        curl -L https://raw.githubusercontent.com/foundry-rs/starknet-foundry/master/scripts/install.sh | sh
+        echo "$HOME/.foundry/bin" >> $GITHUB_PATH
+    
+    - name: Build contracts
+      run: scarb build
+    
+    - name: Deploy to network
+      env:
+        NETWORK: ${{ github.event.inputs.network || 'testnet' }}
+        DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+        RPC_URL: ${{ secrets.RPC_URL }}
+      run: |
+        ./scripts/deploy.sh $NETWORK
+    
+    - name: Upload deployment artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: deployment-${{ github.event.inputs.network || 'testnet' }}
+        path: deployments/

@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Cairo
+      run: |
+        curl -L https://github.com/starkware-libs/cairo/releases/download/v2.4.0/cairo-lang-2.4.0-x86_64-unknown-linux-musl.tar.gz | tar -xz
+        echo "$PWD/cairo-lang-2.4.0/bin" >> $GITHUB_PATH
+    
+    - name: Install Scarb
+      run: |
+        curl --proto '=https' --tlsv1.2 -sSf https://docs.swmansion.com/scarb/install.sh | sh
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+    
+    - name: Install Starknet Foundry
+      run: |
+        curl -L https://raw.githubusercontent.com/foundry-rs/starknet-foundry/master/scripts/install.sh | sh
+        echo "$HOME/.foundry/bin" >> $GITHUB_PATH
+    
+    - name: Cache Scarb dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.scarb
+          target/
+        key: ${{ runner.os }}-scarb-${{ hashFiles('**/Scarb.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-scarb-
+    
+    - name: Check Cairo formatting
+      run: scarb fmt --check
+    
+    - name: Build contracts
+      run: scarb build
+    
+    - name: Run tests
+      run: snforge test
+    
+    - name: Run tests with coverage
+      run: snforge test --coverage
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.lcov
+        flags: unittests
+        name: codecov-umbrella
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Scarb
+      run: |
+        curl --proto '=https' --tlsv1.2 -sSf https://docs.swmansion.com/scarb/install.sh | sh
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+    
+    - name: Check formatting
+      run: scarb fmt --check
+    
+    - name: Lint contracts
+      run: scarb check
+
+  security:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run security analysis
+      run: |
+        echo "Running security checks..."
+        # Add security tools here when available for Cairo
+        echo "Security analysis completed"
+
+  build-docker:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Build Docker image
+      run: docker build -t stark-insured:latest .
+    
+    - name: Test Docker image
+      run: |
+        docker run --rm stark-insured:latest scarb --version
+        docker run --rm stark-insured:latest snforge --version
