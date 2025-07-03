@@ -5,7 +5,7 @@ mod PolicyManager {
     use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
     use stark_insured::errors::PolicyErrors;
     use stark_insured::events::{PolicyCreated, PremiumPaid};
-    use stark_insured::interfaces::{IPolicyManager, Policy};
+    use stark_insured::interfaces::{IPolicyManager, Policy, IPauseable};
     use stark_insured::{constants, utils};
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
 
@@ -23,6 +23,7 @@ mod PolicyManager {
         policies: LegacyMap<u256, Policy>,
         policy_counter: u256,
         premium_token: ContractAddress,
+        paused: bool,
         #[substorage(v0)]
         ownable: OwnableComponent::Storage,
         #[substorage(v0)]
@@ -34,11 +35,19 @@ mod PolicyManager {
     enum Event {
         PolicyCreated: PolicyCreated,
         PremiumPaid: PremiumPaid,
+        Paused: Paused,
+        Unpaused: Unpaused,
         #[flat]
         OwnableEvent: OwnableComponent::Event,
         #[flat]
         ReentrancyGuardEvent: ReentrancyGuardComponent::Event,
     }
+
+    #[derive(Drop, starknet::Event)]
+    struct Paused {}
+
+    #[derive(Drop, starknet::Event)]
+    struct Unpaused {}
 
     #[constructor]
     fn constructor(
@@ -47,6 +56,7 @@ mod PolicyManager {
         self.ownable.initializer(owner);
         self.premium_token.write(premium_token);
         self.policy_counter.write(0);
+        self.paused.write(false);
     }
 
     #[abi(embed_v0)]
@@ -58,6 +68,8 @@ mod PolicyManager {
             duration: u64,
             policy_type: u8,
         ) -> u256 {
+            self.only_unpaused();
+            
             // Validation
             assert(utils::is_valid_address(policy_holder), PolicyErrors::UNAUTHORIZED_ACCESS);
             assert(
@@ -103,6 +115,7 @@ mod PolicyManager {
         }
 
         fn pay_premium(ref self: ContractState, policy_id: u256, amount: u256) {
+            self.only_unpaused();
             self.reentrancy_guard.start();
 
             let policy = self.get_policy(policy_id);
@@ -149,6 +162,34 @@ mod PolicyManager {
 
         fn get_total_policies(self: @ContractState) -> u256 {
             self.policy_counter.read()
+        }
+    }
+
+    #[abi(embed_v0)]
+    impl PauseableImpl of IPauseable<ContractState> {
+        fn pause(ref self: ContractState) {
+            self.ownable.assert_only_owner();
+            assert(!self.paused.read(), 'Already paused');
+            self.paused.write(true);
+            self.emit(Paused {});
+        }
+
+        fn unpause(ref self: ContractState) {
+            self.ownable.assert_only_owner();
+            assert(self.paused.read(), 'Not paused');
+            self.paused.write(false);
+            self.emit(Unpaused {});
+        }
+
+        fn is_paused(self: @ContractState) -> bool {
+            self.paused.read()
+        }
+    }
+
+    #[generate_trait]
+    impl InternalImpl of InternalTrait {
+        fn only_unpaused(self: @ContractState) {
+            assert(!self.paused.read(), 'Contract is paused');
         }
     }
 }

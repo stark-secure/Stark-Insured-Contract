@@ -88,3 +88,10 @@ pub trait IDAOGovernance<TContractState> {
     fn get_proposal(self: @TContractState, proposal_id: u256) -> Proposal;
     fn get_voting_power(self: @TContractState, user: ContractAddress) -> u256;
 }
+
+#[starknet::interface]
+pub trait IPauseable<TContractState> {
+    fn pause(ref self: TContractState);
+    fn unpause(ref self: TContractState);
+    fn is_paused(self: @TContractState) -> bool;
+}

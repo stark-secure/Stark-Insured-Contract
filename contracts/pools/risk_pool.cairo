@@ -5,7 +5,7 @@ mod RiskPool {
     use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
     use stark_insured::errors::PoolErrors;
     use stark_insured::events::{PoolDeposit, PoolWithdrawal};
-    use stark_insured::interfaces::IRiskPool;
+    use stark_insured::interfaces::{IRiskPool, IPauseable};
     use stark_insured::utils;
     use starknet::{ContractAddress, get_caller_address};
 
@@ -25,6 +25,7 @@ mod RiskPool {
         user_balances: LegacyMap<ContractAddress, u256>,
         user_claim_history: LegacyMap<ContractAddress, u256>,
         authorized_processors: LegacyMap<ContractAddress, bool>,
+        paused: bool,
         #[substorage(v0)]
         ownable: OwnableComponent::Storage,
         #[substorage(v0)]
@@ -36,33 +37,41 @@ mod RiskPool {
     enum Event {
         PoolDeposit: PoolDeposit,
         PoolWithdrawal: PoolWithdrawal,
+        Paused: Paused,
+        Unpaused: Unpaused,
         #[flat]
         OwnableEvent: OwnableComponent::Event,
         #[flat]
         ReentrancyGuardEvent: ReentrancyGuardComponent::Event,
     }
 
+    #[derive(Drop, starknet::Event)]
+    struct Paused {}
+
+    #[derive(Drop, starknet::Event)]
+    struct Unpaused {}
+
     #[constructor]
     fn constructor(ref self: ContractState, owner: ContractAddress, pool_token: ContractAddress) {
         self.ownable.initializer(owner);
         self.pool_token.write(pool_token);
         self.total_balance.write(0);
+        self.paused.write(false);
     }
 
     #[abi(embed_v0)]
     impl RiskPoolImpl of IRiskPool<ContractState> {
         fn deposit(ref self: ContractState, amount: u256) {
+            self.only_unpaused();
             assert(amount > 0, PoolErrors::INVALID_AMOUNT);
             self.reentrancy_guard.start();
 
             let caller = get_caller_address();
             let token = IERC20Dispatcher { contract_address: self.pool_token.read() };
 
-            // Transfer tokens from user to pool
             let success = token.transfer_from(caller, starknet::get_contract_address(), amount);
             assert(success, PoolErrors::DEPOSIT_FAILED);
 
-            // Update balances
             let current_balance = self.user_balances.read(caller);
             let new_balance = current_balance + amount;
             self.user_balances.write(caller, new_balance);
@@ -76,6 +85,7 @@ mod RiskPool {
         }
 
         fn withdraw(ref self: ContractState, amount: u256) {
+            self.only_unpaused();
             assert(amount > 0, PoolErrors::INVALID_AMOUNT);
             self.reentrancy_guard.start();
 
@@ -85,14 +95,12 @@ mod RiskPool {
 
             let token = IERC20Dispatcher { contract_address: self.pool_token.read() };
 
-            // Update balances first (CEI pattern)
             let new_balance = current_balance - amount;
             self.user_balances.write(caller, new_balance);
 
             let total = self.total_balance.read();
             self.total_balance.write(total - amount);
 
-            // Transfer tokens
             let success = token.transfer(caller, amount);
             assert(success, PoolErrors::WITHDRAWAL_FAILED);
 
@@ -117,7 +125,8 @@ mod RiskPool {
         }
 
         fn process_payout(ref self: ContractState, recipient: ContractAddress, amount: u256) {
-            // Only authorized processors (like ClaimsProcessor) can call this
+            self.only_unpaused();
+            
             let caller = get_caller_address();
             assert(
                 self.authorized_processors.read(caller) || caller == self.ownable.owner(),
@@ -129,15 +138,12 @@ mod RiskPool {
 
             let token = IERC20Dispatcher { contract_address: self.pool_token.read() };
 
-            // Update total balance
             let total = self.total_balance.read();
             self.total_balance.write(total - amount);
 
-            // Update claim history for risk scoring
             let current_claims = self.user_claim_history.read(recipient);
             self.user_claim_history.write(recipient, current_claims + 1);
 
-            // Transfer payout
             let success = token.transfer(recipient, amount);
             assert(success, PoolErrors::WITHDRAWAL_FAILED);
 
@@ -145,8 +151,33 @@ mod RiskPool {
         }
     }
 
+    #[abi(embed_v0)]
+    impl PauseableImpl of IPauseable<ContractState> {
+        fn pause(ref self: ContractState) {
+            self.ownable.assert_only_owner();
+            assert(!self.paused.read(), 'Already paused');
+            self.paused.write(true);
+            self.emit(Paused {});
+        }
+
+        fn unpause(ref self: ContractState) {
+            self.ownable.assert_only_owner();
+            assert(self.paused.read(), 'Not paused');
+            self.paused.write(false);
+            self.emit(Unpaused {});
+        }
+
+        fn is_paused(self: @ContractState) -> bool {
+            self.paused.read()
+        }
+    }
+
     #[generate_trait]
     impl InternalImpl of InternalTrait {
+        fn only_unpaused(self: @ContractState) {
+            assert(!self.paused.read(), 'Contract is paused');
+        }
+
         fn authorize_processor(ref self: ContractState, processor: ContractAddress) {
             self.ownable.assert_only_owner();
             self.authorized_processors.write(processor, true);

@@ -2,9 +2,9 @@
 mod DAOGovernance {
     use openzeppelin::access::ownable::OwnableComponent;
     use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
-    use stark_insured::errors::GovernanceErrors;
+    use stark_insured::errors::GovernanceErrors;  
     use stark_insured::events::{ProposalCreated, ProposalExecuted, VoteCast};
-    use stark_insured::interfaces::{IDAOGovernance, Proposal};
+    use stark_insured::interfaces::{IDAOGovernance, Proposal, IPauseable};
     use stark_insured::{constants, utils};
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
 
@@ -19,10 +19,9 @@ mod DAOGovernance {
         proposals: LegacyMap<u256, Proposal>,
         proposal_counter: u256,
         governance_token: ContractAddress,
-        user_votes: LegacyMap<(u256, ContractAddress), bool>, // (proposal_id, voter) -> has_voted
-        user_voting_power: LegacyMap<
-            (u256, ContractAddress), u256,
-        >, // (proposal_id, voter) -> voting_power
+        user_votes: LegacyMap<(u256, ContractAddress), bool>,
+        user_voting_power: LegacyMap<(u256, ContractAddress), u256>,
+        paused: bool,
         #[substorage(v0)]
         ownable: OwnableComponent::Storage,
     }
@@ -33,9 +32,17 @@ mod DAOGovernance {
         ProposalCreated: ProposalCreated,
         VoteCast: VoteCast,
         ProposalExecuted: ProposalExecuted,
+        Paused: Paused,
+        Unpaused: Unpaused,
         #[flat]
         OwnableEvent: OwnableComponent::Event,
     }
+
+    #[derive(Drop, starknet::Event)]
+    struct Paused {}
+
+    #[derive(Drop, starknet::Event)]
+    struct Unpaused {}
 
     #[constructor]
     fn constructor(
@@ -44,6 +51,7 @@ mod DAOGovernance {
         self.ownable.initializer(owner);
         self.governance_token.write(governance_token);
         self.proposal_counter.write(0);
+        self.paused.write(false);
     }
 
     #[abi(embed_v0)]
@@ -54,6 +62,8 @@ mod DAOGovernance {
             description: felt252,
             execution_data: Span<felt252>,
         ) -> u256 {
+            self.only_unpaused();
+            
             let caller = get_caller_address();
             let voting_power = self.get_voting_power(caller);
 
@@ -85,25 +95,22 @@ mod DAOGovernance {
         }
 
         fn vote(ref self: ContractState, proposal_id: u256, support: bool, voting_power: u256) {
+            self.only_unpaused();
+            
             let caller = get_caller_address();
             let proposal = self.get_proposal(proposal_id);
 
-            // Check voting period
             let current_time = get_block_timestamp();
             assert(current_time <= proposal.end_time, GovernanceErrors::VOTING_PERIOD_ENDED);
 
-            // Check if already voted
             assert(!self.user_votes.read((proposal_id, caller)), 'Already voted');
 
-            // Validate voting power
             let max_voting_power = self.get_voting_power(caller);
             assert(voting_power <= max_voting_power, 'Invalid voting power');
 
-            // Record vote
             self.user_votes.write((proposal_id, caller), true);
             self.user_voting_power.write((proposal_id, caller), voting_power);
 
-            // Update proposal vote counts
             let mut updated_proposal = proposal;
             if support {
                 updated_proposal.votes_for += voting_power;
@@ -116,10 +123,11 @@ mod DAOGovernance {
         }
 
         fn execute_proposal(ref self: ContractState, proposal_id: u256) {
+            self.only_unpaused();
+            
             let proposal = self.get_proposal(proposal_id);
             assert(!proposal.executed, GovernanceErrors::ALREADY_EXECUTED);
 
-            // Check if proposal is ready for execution
             assert(
                 utils::is_proposal_ready_for_execution(
                     proposal.votes_for,
@@ -130,13 +138,9 @@ mod DAOGovernance {
                 GovernanceErrors::PROPOSAL_NOT_READY,
             );
 
-            // Mark as executed
             let mut updated_proposal = proposal;
             updated_proposal.executed = true;
             self.proposals.write(proposal_id, updated_proposal);
-
-            // TODO: Execute proposal logic based on execution_data
-            // This would typically involve calling other contracts or updating parameters
 
             self.emit(ProposalExecuted { proposal_id, success: true });
         }
@@ -155,6 +159,10 @@ mod DAOGovernance {
 
     #[generate_trait]
     impl InternalImpl of InternalTrait {
+        fn only_unpaused(self: @ContractState) {
+            assert(!self.paused.read(), 'Contract is paused');
+        }
+
         fn has_voted(self: @ContractState, proposal_id: u256, voter: ContractAddress) -> bool {
             self.user_votes.read((proposal_id, voter))
         }
@@ -164,5 +172,26 @@ mod DAOGovernance {
         ) -> u256 {
             self.user_voting_power.read((proposal_id, voter))
         }
+    }
+}
+
+#[abi(embed_v0)]
+impl PauseableImpl of IPauseable<ContractState> {
+    fn pause(ref self: ContractState) {
+        self.ownable.assert_only_owner();
+        assert(!self.paused.read(), 'Already paused');
+        self.paused.write(true);
+        self.emit(Paused {});
+    }
+
+    fn unpause(ref self: ContractState) {
+        self.ownable.assert_only_owner();
+        assert(self.paused.read(), 'Not paused');
+        self.paused.write(false);
+        self.emit(Unpaused {});
+    }
+
+    fn is_paused(self: @ContractState) -> bool {
+        self.paused.read()
     }
 }
