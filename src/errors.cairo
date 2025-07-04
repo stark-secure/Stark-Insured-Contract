@@ -32,3 +32,21 @@ pub mod GovernanceErrors {
     pub const ALREADY_EXECUTED: felt252 = 'Already executed';
     pub const INSUFFICIENT_VOTES: felt252 = 'Insufficient votes';
 }
+
+pub mod RegistryErrors {
+    pub const CONTRACT_NOT_FOUND: felt252 = 'Contract not found';
+    pub const CONTRACT_ALREADY_REGISTERED: felt252 = 'Contract already registered';
+    pub const INVALID_CONTRACT_NAME: felt252 = 'Invalid contract name';
+    pub const INVALID_CONTRACT_ADDRESS: felt252 = 'Invalid contract address';
+    pub const UNAUTHORIZED_ACCESS: felt252 = 'Unauthorized access';
+}
+
+pub mod RegistryErrors {
+    pub const CONTRACT_NOT_FOUND: felt252 = 'Contract not found';
+    pub const CONTRACT_ALREADY_REGISTERED: felt252 = 'Contract already registered';
+    pub const INVALID_CONTRACT_NAME: felt252 = 'Invalid contract name';
+    pub const INVALID_CONTRACT_ADDRESS: felt252 = 'Invalid contract address';
+    pub const UNAUTHORIZED_ACCESS: felt252 = 'Unauthorized access';
+}
+
+// Remove the duplicate RegistryErrors module at the end

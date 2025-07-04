@@ -95,3 +95,34 @@ pub trait IPauseable<TContractState> {
     fn unpause(ref self: TContractState);
     fn is_paused(self: @TContractState) -> bool;
 }
+
+
+/// @title Contract Registry Interface
+/// @notice Interface for the central contract registry that stores and retrieves protocol component addresses
+#[starknet::interface]
+pub trait IContractRegistry<TContractState> {
+    /// @notice Register a contract address with a unique name identifier
+    /// @param name The unique identifier for the contract
+    /// @param address The contract address to register
+    /// @dev Only callable by the contract owner
+    fn register_contract(ref self: TContractState, name: felt252, address: ContractAddress);
+    
+    /// @notice Retrieve a contract address by its name identifier
+    /// @param name The unique identifier for the contract
+    /// @return The contract address associated with the name
+    fn get_address(self: @TContractState, name: felt252) -> ContractAddress;
+    
+    /// @notice Check if a contract name is registered
+    /// @param name The unique identifier to check
+    /// @return True if the name is registered, false otherwise
+    fn is_registered(self: @TContractState, name: felt252) -> bool;
+    
+    /// @notice Get all registered contract names
+    /// @return Array of all registered contract names
+    fn get_all_names(self: @TContractState) -> Array<felt252>;
+    
+    /// @notice Remove a contract from the registry
+    /// @param name The unique identifier for the contract to remove
+    /// @dev Only callable by the contract owner
+    fn unregister_contract(ref self: TContractState, name: felt252);
+}
