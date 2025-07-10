@@ -1,3 +1,62 @@
+    // --- Policy Lifecycle Extensions ---
+    /// @notice Issues a new policy for a user
+    /// @dev Only owner can issue. Records metadata and emits event.
+    fn issue_policy(ref self: ContractState, user: ContractAddress, policy_type: u8, duration: u64) {
+        self.ownable.assert_only_owner();
+        let now = get_block_timestamp();
+        let policy_id = self.policy_counter.read() + 1;
+        self.policy_counter.write(policy_id);
+        let premium = self.calculate_premium(constants::MIN_COVERAGE_AMOUNT, duration, policy_type);
+        let policy = Policy {
+            id: policy_id,
+            holder: user,
+            coverage_amount: constants::MIN_COVERAGE_AMOUNT,
+            premium,
+            start_time: now,
+            end_time: now + duration,
+            policy_type,
+            is_active: true,
+        };
+        self.policies.write(policy_id, policy);
+        self.emit(PolicyCreated { policy_id, holder: user, coverage_amount: constants::MIN_COVERAGE_AMOUNT, premium, policy_type });
+    }
+
+    /// @notice Returns true if the user holds a valid, non-expired, non-revoked policy
+    #[view]
+    fn validate_policy(self: @ContractState, user: ContractAddress) -> bool {
+        // Find policy by user
+        let mut found = false;
+        let mut valid = false;
+        let total = self.policy_counter.read();
+        let now = get_block_timestamp();
+        let mut i = 1;
+        while i <= total {
+            let policy = self.policies.read(i);
+            if policy.holder == user {
+                found = true;
+                valid = policy.is_active && now <= policy.end_time;
+                break;
+            }
+            i = i + 1;
+        }
+        found && valid
+    }
+
+    /// @notice Revokes a user's policy (only owner)
+    fn revoke_policy(ref self: ContractState, user: ContractAddress) {
+        self.ownable.assert_only_owner();
+        let total = self.policy_counter.read();
+        let mut i = 1;
+        while i <= total {
+            let mut policy = self.policies.read(i);
+            if policy.holder == user && policy.is_active {
+                policy.is_active = false;
+                self.policies.write(i, policy);
+                break;
+            }
+            i = i + 1;
+        }
+    }
 #[starknet::contract]
 mod PolicyManager {
     use openzeppelin::access::ownable::OwnableComponent;
