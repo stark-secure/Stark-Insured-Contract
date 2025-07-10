@@ -61,6 +61,43 @@ mod RiskPool {
 
     #[abi(embed_v0)]
     impl RiskPoolImpl of IRiskPool<ContractState> {
+        /// @view
+        /// Returns the claimable amount for a user based on policy status, oracle event, and pool liquidity.
+        #[view]
+        fn claimable_amount(self: @ContractState, user: ContractAddress) -> u256 {
+            // --- 1. Check if user has an active policy ---
+            // For demo: Assume policy_id == 1 for user (in real, would map user to policy_id)
+            let policy_manager_addr = 0; // TODO: Set actual PolicyManager address or fetch from registry
+            if policy_manager_addr == 0 {
+                return 0;
+            }
+            let policy_manager = stark_insured::interfaces::IPolicyManagerDispatcher { contract_address: policy_manager_addr };
+            let policy_id = 1; // TODO: Replace with actual lookup
+            let is_active = policy_manager.is_policy_active(policy_id);
+            if !is_active {
+                return 0;
+            }
+
+            // --- 2. Check if oracle event has occurred ---
+            // For demo: Assume oracle event flag is true (replace with actual oracle check)
+            let oracle_event_triggered = true;
+            if !oracle_event_triggered {
+                return 0;
+            }
+
+            // --- 3. Compute payout based on policy terms and pool liquidity ---
+            let policy = policy_manager.get_policy(policy_id);
+            let coverage_amount = policy.coverage_amount;
+            let coverage_percent = 80; // e.g., 80% payout, replace with policy field if available
+            let payout = (coverage_amount * coverage_percent.into()) / 100;
+
+            // --- 4. Cap payout by pool balance ---
+            let pool_balance = self.total_balance.read();
+            let claimable = if payout > pool_balance { pool_balance } else { payout };
+
+            // --- 5. Cap per user/global limits (optional, add logic as needed) ---
+            claimable
+        }
         fn deposit(ref self: ContractState, amount: u256) {
             self.only_unpaused();
             assert(amount > 0, PoolErrors::INVALID_AMOUNT);
