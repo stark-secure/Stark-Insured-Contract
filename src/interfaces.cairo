@@ -73,6 +73,8 @@ pub trait IRiskPool<TContractState> {
     fn get_user_balance(self: @TContractState, user: ContractAddress) -> u256;
     fn calculate_risk_score(self: @TContractState, user: ContractAddress) -> u256;
     fn process_payout(ref self: TContractState, recipient: ContractAddress, amount: u256);
+    #[view]
+    fn claimable_amount(self: @TContractState, user: ContractAddress) -> u256;
 }
 
 #[starknet::interface]
