@@ -95,6 +95,15 @@ pub struct ContractRegistered {
 }
 
 #[derive(Drop, starknet::Event)]
+pub struct ContractUpdated {
+    #[key]
+    pub name: felt252,
+    pub old_address: ContractAddress,
+    pub new_address: ContractAddress,
+    pub updated_by: ContractAddress,
+}
+
+#[derive(Drop, starknet::Event)]
 pub struct ContractUnregistered {
     #[key]
     pub name: felt252,
@@ -110,7 +119,21 @@ pub struct ContractUpdated {
     pub updated_by: ContractAddress,
 }
 
-// Remove the duplicate events at the end of the file
+#[derive(Drop, starknet::Event)]
+pub struct ContractUnregistered {
+    #[key]
+    pub name: felt252,
+    pub unregistered_by: ContractAddress,
+}
+
+#[derive(Drop, starknet::Event)]
+pub struct ContractUpdated {
+    #[key]
+    pub name: felt252,
+    pub old_address: ContractAddress,
+    pub new_address: ContractAddress,
+    pub updated_by: ContractAddress,
+}
 #[derive(Drop, starknet::Event)]
 pub struct ContractRegistered {
     #[key]
@@ -118,13 +141,6 @@ pub struct ContractRegistered {
     #[key]
     pub address: ContractAddress,
     pub registered_by: ContractAddress,
-}
-
-#[derive(Drop, starknet::Event)]
-pub struct ContractUnregistered {
-    #[key]
-    pub name: felt252,
-    pub unregistered_by: ContractAddress,
 }
 
 #[derive(Drop, starknet::Event)]

@@ -115,16 +115,11 @@ pub trait IContractRegistry<TContractState> {
     fn get_address(self: @TContractState, name: felt252) -> ContractAddress;
     
     /// @notice Check if a contract name is registered
-    /// @param name The unique identifier to check
-    /// @return True if the name is registered, false otherwise
     fn is_registered(self: @TContractState, name: felt252) -> bool;
     
     /// @notice Get all registered contract names
-    /// @return Array of all registered contract names
     fn get_all_names(self: @TContractState) -> Array<felt252>;
     
     /// @notice Remove a contract from the registry
-    /// @param name The unique identifier for the contract to remove
-    /// @dev Only callable by the contract owner
     fn unregister_contract(ref self: TContractState, name: felt252);
 }
