@@ -147,3 +147,56 @@ fn test_proposal_creation_and_voting_when_unpaused() {
     // Should work without issues when not paused
     assert(proposal_id == 1, 'Proposal ID should be 1');
 }
+
+#[test]
+#[should_panic(expected: ('Already paused',))]
+fn test_double_pause_attempt() {
+    let governance = deploy_governance();
+    
+    start_prank(CheatTarget::One(governance.contract_address), OWNER());
+    governance.pause();
+    // Try to pause again - should fail
+    governance.pause();
+}
+
+#[test]
+#[should_panic(expected: ('Not paused',))]
+fn test_unpause_when_not_paused() {
+    let governance = deploy_governance();
+    
+    start_prank(CheatTarget::One(governance.contract_address), OWNER());
+    // Try to unpause when not paused - should fail
+    governance.unpause();
+}
+
+#[test]
+fn test_ownership_transfer() {
+    let governance = deploy_governance();
+    
+    // Transfer ownership
+    start_prank(CheatTarget::One(governance.contract_address), OWNER());
+    governance.transfer_ownership(USER1());
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // New owner should be able to pause
+    start_prank(CheatTarget::One(governance.contract_address), USER1());
+    governance.pause();
+    assert(governance.is_paused(), 'Should be paused by new owner');
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // Old owner should not be able to unpause
+    start_prank(CheatTarget::One(governance.contract_address), OWNER());
+    let result = std::panic::catch_unwind(|| {
+        governance.unpause();
+    });
+    assert(result.is_err(), 'Old owner should not be able to unpause');
+}
+
+#[test]
+#[should_panic(expected: ('New owner cannot be zero',))]
+fn test_transfer_ownership_to_zero_address() {
+    let governance = deploy_governance();
+    
+    start_prank(CheatTarget::One(governance.contract_address), OWNER());
+    governance.transfer_ownership(contract_address_const::<0>());
+}
