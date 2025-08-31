@@ -94,3 +94,56 @@ fn test_vote_when_paused() {
     governance.vote(proposal_id, true);
 }
 
+
+#[test]
+fn test_normal_to_paused_to_normal_flow() {
+    let governance = deploy_governance();
+    
+    // Normal operation: create proposal
+    start_prank(CheatTarget::One(governance.contract_address), USER1());
+    let proposal_id = governance.create_proposal(
+        'Test Proposal',
+        'Test Description',
+        contract_address_const::<'target'>(),
+        array![].span()
+    );
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // Pause the contract
+    start_prank(CheatTarget::One(governance.contract_address), OWNER());
+    governance.pause();
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // Unpause the contract
+    start_prank(CheatTarget::One(governance.contract_address), OWNER());
+    governance.unpause();
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // Normal operation should work again: vote
+    start_prank(CheatTarget::One(governance.contract_address), USER2());
+    governance.vote(proposal_id, true);
+    stop_prank(CheatTarget::One(governance.contract_address));
+}
+
+#[test]
+fn test_proposal_creation_and_voting_when_unpaused() {
+    let governance = deploy_governance();
+    
+    // Create proposal
+    start_prank(CheatTarget::One(governance.contract_address), USER1());
+    let proposal_id = governance.create_proposal(
+        'Test Proposal',
+        'Test Description',
+        contract_address_const::<'target'>(),
+        array![].span()
+    );
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // Vote on proposal
+    start_prank(CheatTarget::One(governance.contract_address), USER2());
+    governance.vote(proposal_id, true);
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // Should work without issues when not paused
+    assert(proposal_id == 1, 'Proposal ID should be 1');
+}
