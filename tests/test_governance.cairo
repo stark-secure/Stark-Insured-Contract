@@ -200,3 +200,52 @@ fn test_transfer_ownership_to_zero_address() {
     start_prank(CheatTarget::One(governance.contract_address), OWNER());
     governance.transfer_ownership(contract_address_const::<0>());
 }
+
+
+#[test]
+fn test_multiple_proposals_with_pause_scenarios() {
+    let governance = deploy_governance();
+    
+    // Create first proposal
+    start_prank(CheatTarget::One(governance.contract_address), USER1());
+    let proposal_id_1 = governance.create_proposal(
+        'Proposal 1',
+        'First proposal',
+        contract_address_const::<'target1'>(),
+        array![].span()
+    );
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // Vote on first proposal
+    start_prank(CheatTarget::One(governance.contract_address), USER2());
+    governance.vote(proposal_id_1, true);
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // Pause the contract
+    start_prank(CheatTarget::One(governance.contract_address), OWNER());
+    governance.pause();
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // Unpause and create second proposal
+    start_prank(CheatTarget::One(governance.contract_address), OWNER());
+    governance.unpause();
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    start_prank(CheatTarget::One(governance.contract_address), USER1());
+    let proposal_id_2 = governance.create_proposal(
+        'Proposal 2',
+        'Second proposal',
+        contract_address_const::<'target2'>(),
+        array![].span()
+    );
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // Both proposals should exist
+    assert(proposal_id_1 == 1, 'First proposal ID should be 1');
+    assert(proposal_id_2 == 2, 'Second proposal ID should be 2');
+    
+    // Execute first proposal (should work)
+    start_prank(CheatTarget::One(governance.contract_address), USER1());
+    governance.execute_proposal(proposal_id_1);
+    stop_prank(CheatTarget::One(governance.contract_address));
+}
