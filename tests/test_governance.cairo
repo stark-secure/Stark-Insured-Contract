@@ -249,3 +249,60 @@ fn test_multiple_proposals_with_pause_scenarios() {
     governance.execute_proposal(proposal_id_1);
     stop_prank(CheatTarget::One(governance.contract_address));
 }
+
+
+#[test]
+fn test_complex_voting_scenario_with_pause() {
+    let governance = deploy_governance();
+    
+    // Create proposal
+    start_prank(CheatTarget::One(governance.contract_address), USER1());
+    let proposal_id = governance.create_proposal(
+        'Complex Proposal',
+        'A proposal for complex testing',
+        contract_address_const::<'target'>(),
+        array![].span()
+    );
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // First user votes in favor
+    start_prank(CheatTarget::One(governance.contract_address), USER2());
+    governance.vote(proposal_id, true);
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // Pause before more voting
+    start_prank(CheatTarget::One(governance.contract_address), OWNER());
+    governance.pause();
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // Unpause and continue voting
+    start_prank(CheatTarget::One(governance.contract_address), OWNER());
+    governance.unpause();
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // Additional user votes (different user from before)
+    let user3 = contract_address_const::<'user3'>();
+    start_prank(CheatTarget::One(governance.contract_address), user3);
+    governance.vote(proposal_id, false);
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // Proposal should still be executable since we have more votes for than against
+    start_prank(CheatTarget::One(governance.contract_address), USER1());
+    governance.execute_proposal(proposal_id);
+    stop_prank(CheatTarget::One(governance.contract_address));
+}
+
+#[test]
+#[should_panic(expected: ('Already voted',))]
+fn test_double_voting_prevention() {
+    let governance = deploy_governance();
+    
+    // Create proposal
+    start_prank(CheatTarget::One(governance.contract_address), USER1());
+    let proposal_id = governance.create_proposal(
+        'Test Proposal',
+        'Test Description',
+        contract_address_const::<'target'>(),
+        array![].span()
+    );
+    stop_prank(CheatTarget::One(governance.contract_address));
