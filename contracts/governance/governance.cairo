@@ -207,3 +207,79 @@ mod Governance {
                 timestamp,
             });
         }
+
+        
+        fn execute_proposal(ref self: ContractState, proposal_id: u256) {
+            only_unpaused(@self);
+            
+            let caller = get_caller_address();
+            let timestamp = get_block_timestamp();
+            
+            let mut proposal = self.proposals.read(proposal_id);
+            assert(proposal.id != 0, 'Proposal does not exist');
+            assert(!proposal.executed, 'Proposal already executed');
+            assert(proposal.votes_for > proposal.votes_against, 'Proposal rejected');
+            
+            // Mark as executed
+            proposal.executed = true;
+            self.proposals.write(proposal_id, proposal);
+            
+            self.emit(ProposalExecuted {
+                proposal_id,
+                executor: caller,
+                timestamp,
+            });
+        }
+
+        fn pause(ref self: ContractState) {
+            only_owner(@self);
+            assert(!self.paused.read(), 'Already paused');
+            
+            self.paused.write(true);
+            
+            let caller = get_caller_address();
+            let timestamp = get_block_timestamp();
+            
+            self.emit(Paused {
+                admin: caller,
+                timestamp,
+            });
+        }
+
+        fn unpause(ref self: ContractState) {
+            only_owner(@self);
+            assert(self.paused.read(), 'Not paused');
+            
+            self.paused.write(false);
+            
+            let caller = get_caller_address();
+            let timestamp = get_block_timestamp();
+            
+            self.emit(Unpaused {
+                admin: caller,
+                timestamp,
+            });
+        }
+
+        fn is_paused(self: @ContractState) -> bool {
+            self.paused.read()
+        }
+
+        fn get_owner(self: @ContractState) -> ContractAddress {
+            self.owner.read()
+        }
+
+        fn transfer_ownership(ref self: ContractState, new_owner: ContractAddress) {
+            only_owner(@self);
+            assert(!new_owner.is_zero(), 'New owner cannot be zero');
+            
+            let previous_owner = self.owner.read();
+            self.owner.write(new_owner);
+            
+            self.emit(OwnershipTransferred {
+                previous_owner,
+                new_owner,
+            });
+        }
+    }
+}
