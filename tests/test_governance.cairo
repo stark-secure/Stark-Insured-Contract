@@ -48,3 +48,49 @@ fn test_pause_only_owner() {
     start_prank(CheatTarget::One(governance.contract_address), USER1());
     governance.pause();
 }
+
+#[test]
+#[should_panic(expected: ('Contract is paused',))]
+fn test_create_proposal_when_paused() {
+    let governance = deploy_governance();
+    
+    // Pause the contract
+    start_prank(CheatTarget::One(governance.contract_address), OWNER());
+    governance.pause();
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // Try to create proposal when paused
+    start_prank(CheatTarget::One(governance.contract_address), USER1());
+    governance.create_proposal(
+        'Test Proposal',
+        'Test Description',
+        contract_address_const::<'target'>(),
+        array![].span()
+    );
+}
+
+#[test]
+#[should_panic(expected: ('Contract is paused',))]
+fn test_vote_when_paused() {
+    let governance = deploy_governance();
+    
+    // Create a proposal first
+    start_prank(CheatTarget::One(governance.contract_address), USER1());
+    let proposal_id = governance.create_proposal(
+        'Test Proposal',
+        'Test Description',
+        contract_address_const::<'target'>(),
+        array![].span()
+    );
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // Pause the contract
+    start_prank(CheatTarget::One(governance.contract_address), OWNER());
+    governance.pause();
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // Try to vote when paused
+    start_prank(CheatTarget::One(governance.contract_address), USER2());
+    governance.vote(proposal_id, true);
+}
+
