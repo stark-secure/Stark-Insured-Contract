@@ -101,3 +101,109 @@ mod Governance {
         admin: ContractAddress,
         timestamp: u64,
     }
+
+    
+    #[derive(Drop, starknet::Event)]
+    struct OwnershipTransferred {
+        previous_owner: ContractAddress,
+        new_owner: ContractAddress,
+    }
+
+    #[constructor]
+    fn constructor(ref self: ContractState, owner: ContractAddress) {
+        self.owner.write(owner);
+        self.paused.write(false);
+        self.proposal_count.write(0);
+    }
+
+    fn only_owner(self: @ContractState) {
+        let caller = get_caller_address();
+        let owner = self.owner.read();
+        assert(caller == owner, 'Only owner can call this function');
+    }
+
+    fn only_unpaused(self: @ContractState) {
+        let is_paused = self.paused.read();
+        assert(!is_paused, 'Contract is paused');
+    }
+
+    #[abi(embed_v0)]
+    impl GovernanceImpl of super::IGovernance<ContractState> {
+        fn create_proposal(
+            ref self: ContractState,
+            title: felt252,
+            description: felt252,
+            target: ContractAddress,
+            calldata: Span<felt252>
+        ) -> u256 {
+            only_unpaused(@self);
+            
+            let caller = get_caller_address();
+            let proposal_id = self.proposal_count.read() + 1;
+            let timestamp = get_block_timestamp();
+            
+            let proposal = Proposal {
+                id: proposal_id,
+                title,
+                description,
+                proposer: caller,
+                target,
+                calldata,
+                created_at: timestamp,
+                executed: false,
+                votes_for: 0,
+                votes_against: 0,
+            };
+            
+            self.proposals.write(proposal_id, proposal);
+            self.proposal_count.write(proposal_id);
+            
+            self.emit(ProposalCreated {
+                proposal_id,
+                proposer: caller,
+                title,
+                timestamp,
+            });
+            
+            proposal_id
+        }
+
+        fn vote(ref self: ContractState, proposal_id: u256, support: bool) {
+            only_unpaused(@self);
+            
+            let caller = get_caller_address();
+            let timestamp = get_block_timestamp();
+            
+            // Check if proposal exists
+            let proposal = self.proposals.read(proposal_id);
+            assert(proposal.id != 0, 'Proposal does not exist');
+            assert(!proposal.executed, 'Proposal already executed');
+            
+            // Check if user has already voted
+            let existing_vote = self.votes.read((proposal_id, caller));
+            assert(existing_vote.voter.is_zero(), 'Already voted');
+            
+            // Record the vote
+            let vote = Vote {
+                voter: caller,
+                support,
+                timestamp,
+            };
+            self.votes.write((proposal_id, caller), vote);
+            
+            // Update proposal vote counts
+            let mut updated_proposal = proposal;
+            if support {
+                updated_proposal.votes_for += 1;
+            } else {
+                updated_proposal.votes_against += 1;
+            }
+            self.proposals.write(proposal_id, updated_proposal);
+            
+            self.emit(VoteCast {
+                proposal_id,
+                voter: caller,
+                support,
+                timestamp,
+            });
+        }
