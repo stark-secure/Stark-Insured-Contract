@@ -306,3 +306,68 @@ fn test_double_voting_prevention() {
         array![].span()
     );
     stop_prank(CheatTarget::One(governance.contract_address));
+
+    
+    // Vote once
+    start_prank(CheatTarget::One(governance.contract_address), USER2());
+    governance.vote(proposal_id, true);
+    
+    // Try to vote again - should fail
+    governance.vote(proposal_id, false);
+}
+
+#[test]
+#[should_panic(expected: ('Proposal does not exist',))]
+fn test_vote_on_nonexistent_proposal() {
+    let governance = deploy_governance();
+    
+    start_prank(CheatTarget::One(governance.contract_address), USER1());
+    governance.vote(999, true); // Non-existent proposal ID
+}
+
+#[test]
+#[should_panic(expected: ('Proposal rejected',))]
+fn test_execute_rejected_proposal() {
+    let governance = deploy_governance();
+    
+    // Create proposal
+    start_prank(CheatTarget::One(governance.contract_address), USER1());
+    let proposal_id = governance.create_proposal(
+        'Rejected Proposal',
+        'This will be rejected',
+        contract_address_const::<'target'>(),
+        array![].span()
+    );
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // Vote against
+    start_prank(CheatTarget::One(governance.contract_address), USER2());
+    governance.vote(proposal_id, false);
+    stop_prank(CheatTarget::One(governance.contract_address));
+    
+    // Try to execute rejected proposal
+    start_prank(CheatTarget::One(governance.contract_address), USER1());
+    governance.execute_proposal(proposal_id);
+}
+
+#[test]
+fn test_pause_state_persistence() {
+    let governance = deploy_governance();
+    
+    // Verify initial state
+    assert(!governance.is_paused(), 'Should start unpaused');
+    
+    // Pause and verify
+    start_prank(CheatTarget::One(governance.contract_address), OWNER());
+    governance.pause();
+    assert(governance.is_paused(), 'Should be paused');
+    
+    // State should persist across different function calls
+    assert(governance.is_paused(), 'Should still be paused');
+    assert(governance.get_owner() == OWNER(), 'Owner should be unchanged');
+    
+    // Unpause and verify
+    governance.unpause();
+    assert(!governance.is_paused(), 'Should be unpaused');
+    stop_prank(CheatTarget::One(governance.contract_address));
+}
