@@ -84,6 +84,80 @@ async def test_overflow_mint(token_factory):
     with pytest.raises(Exception):
         await token.mint(to, MAX_UINT256).invoke()
 
+
+@pytest.mark.asyncio
+async def test_approve_and_allowance(token_factory):
+    _, token, _ = token_factory
+    owner = 1234
+    spender = 2222
+    amount = Uint256(50, 0)
+    await token.approve(spender, amount).invoke(caller_address=owner)
+    allowed = await token.allowanceOf(owner, spender).call()
+    assert allowed.result.remaining == amount
+
+@pytest.mark.asyncio
+async def test_transfer_from(token_factory):
+    _, token, _ = token_factory
+    owner = 1234
+    spender = 2222
+    receiver = 3333
+    amount = Uint256(20, 0)
+    # Approve first
+    await token.approve(spender, amount).invoke(caller_address=owner)
+    # Spender transfers from owner to receiver
+    await token.transferFrom(owner, receiver, amount).invoke(caller_address=spender)
+    bal = await token.balanceOf(receiver).call()
+    assert bal.result.balance == amount
+    # Allowance should be zero now
+    allowed = await token.allowanceOf(owner, spender).call()
+    assert allowed.result.remaining == Uint256(0, 0)
+
+@pytest.mark.asyncio
+async def test_transfer_from_insufficient_allowance(token_factory):
+    _, token, _ = token_factory
+    owner = 1234
+    spender = 2222
+    receiver = 3333
+    amount = Uint256(10, 0)
+    # Approve less than amount
+    await token.approve(spender, Uint256(5, 0)).invoke(caller_address=owner)
+    with pytest.raises(Exception):
+        await token.transferFrom(owner, receiver, amount).invoke(caller_address=spender)
+
+@pytest.mark.asyncio
+async def test_transfer_from_insufficient_balance(token_factory):
+    _, token, _ = token_factory
+    owner = 1234
+    spender = 2222
+    receiver = 3333
+    # Approve a large amount
+    await token.approve(spender, Uint256(1000, 0)).invoke(caller_address=owner)
+    # Drain owner's balance
+    await token.transfer(receiver, Uint256(1000, 0)).invoke(caller_address=owner)
+    # Now try transferFrom
+    with pytest.raises(Exception):
+        await token.transferFrom(owner, receiver, Uint256(1, 0)).invoke(caller_address=spender)
+
+@pytest.mark.asyncio
+async def test_approve_overwrite(token_factory):
+    _, token, _ = token_factory
+    owner = 1234
+    spender = 2222
+    await token.approve(spender, Uint256(10, 0)).invoke(caller_address=owner)
+    await token.approve(spender, Uint256(20, 0)).invoke(caller_address=owner)
+    allowed = await token.allowanceOf(owner, spender).call()
+    assert allowed.result.remaining == Uint256(20, 0)
+
+@pytest.mark.asyncio
+async def test_approve_and_transfer_from_zero(token_factory):
+    _, token, _ = token_factory
+    owner = 1234
+    spender = 2222
+    receiver = 3333
+    await token.approve(spender, Uint256(0, 0)).invoke(caller_address=owner)
+    with pytest.raises(Exception):
+        await token.transferFrom(owner, receiver, Uint256(1, 0)).invoke(caller_address=spender)
+
 @pytest.mark.asyncio
 async def test_name_symbol_decimals(token_factory):
     _, token, _ = token_factory
