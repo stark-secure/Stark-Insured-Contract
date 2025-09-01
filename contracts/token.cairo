@@ -3,6 +3,7 @@
 
 from starkware.cairo.common.cairo_builtins import HashBuiltin
 from starkware.cairo.common.uint256 import Uint256, uint256_add, uint256_sub, uint256_eq, uint256_le, uint256_lt
+from starkware.cairo.common.uint256 import uint256_gt
 from starkware.cairo.common.uint256 import uint256_zero
 from starkware.starknet.common.syscalls import get_caller_address
 
@@ -18,12 +19,21 @@ end
 func owner() -> (res: felt):
 end
 
+
+@storage_var
+func allowance(owner: felt, spender: felt) -> (res: Uint256):
+end
+
 @event
 func Transfer(from_: felt, to: felt, value: Uint256):
 end
 
 @event
 func Mint(to: felt, value: Uint256):
+end
+
+@event
+func Approval(owner: felt, spender: felt, value: Uint256):
 end
 
 @constructor
@@ -62,6 +72,7 @@ func mint{
     return ()
 end
 
+
 @external
 func transfer{
     syscall_ptr: felt*,
@@ -82,10 +93,54 @@ func transfer{
     return (1)
 end
 
+@external
+func approve{
+    syscall_ptr: felt*,
+    pedersen_ptr: HashBuiltin*,
+    range_check_ptr
+}(spender: felt, amount: Uint256) -> (success: felt):
+    let (caller) = get_caller_address()
+    allowance.write(caller, spender, amount)
+    Approval.emit(caller, spender, amount)
+    return (1)
+end
+
+@external
+func transferFrom{
+    syscall_ptr: felt*,
+    pedersen_ptr: HashBuiltin*,
+    range_check_ptr
+}(from_: felt, to: felt, amount: Uint256) -> (success: felt):
+    let (caller) = get_caller_address()
+    let (allowed) = allowance.read(from_, caller)
+    let (enough_allowance) = uint256_le(amount, allowed)
+    assert enough_allowance = 1
+    let (from_balance) = balances.read(from_)
+    let (enough_balance) = uint256_le(amount, from_balance)
+    assert enough_balance = 1
+    let (new_from_balance, _) = uint256_sub(from_balance, amount)
+    balances.write(from_, new_from_balance)
+    let (to_balance) = balances.read(to)
+    let (new_to_balance, overflow) = uint256_add(to_balance, amount)
+    assert overflow = 0
+    balances.write(to, new_to_balance)
+    let (new_allowance, _) = uint256_sub(allowed, amount)
+    allowance.write(from_, caller, new_allowance)
+    Transfer.emit(from_, to, amount)
+    return (1)
+end
+
+
 @view
 func balanceOf(account: felt) -> (balance: Uint256):
     let (bal) = balances.read(account)
     return (bal)
+end
+
+@view
+func allowanceOf(owner_: felt, spender: felt) -> (remaining: Uint256):
+    let (allowed) = allowance.read(owner_, spender)
+    return (allowed)
 end
 
 @view
