@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // @title Staking Contract for Insurance Risk Pools
 // @notice Users can stake tokens, earn rewards, and withdraw with or without penalty.
+// stack file
 
 #[starknet::contract]
 mod Staking {
