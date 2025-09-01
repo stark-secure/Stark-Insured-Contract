@@ -34,9 +34,14 @@ async def test_owner_can_mint(token_factory):
     _, token, _ = token_factory
     to = 5678
     amount = Uint256(100, 0)
-    await token.mint(to, amount).invoke()
+    exec_info = await token.mint(to, amount).invoke()
     bal = await token.balanceOf(to).call()
     assert bal.result.balance == amount
+    # Check Mint event
+    events = exec_info.main_call_events
+    assert any(e.keys[0] == token.Mint.selector for e in events)
+    # Gas profiling (manual):
+    # print('Gas used for mint:', getattr(exec_info, 'actual_fee', 'N/A'))
 
 @pytest.mark.asyncio
 async def test_non_owner_cannot_mint(token_factory):
@@ -53,9 +58,14 @@ async def test_transfer(token_factory):
     sender = 1234
     receiver = 4321
     amount = Uint256(10, 0)
-    await token.transfer(receiver, amount).invoke(caller_address=sender)
+    exec_info = await token.transfer(receiver, amount).invoke(caller_address=sender)
     bal = await token.balanceOf(receiver).call()
     assert bal.result.balance == amount
+    # Check Transfer event
+    events = exec_info.main_call_events
+    assert any(e.keys[0] == token.Transfer.selector for e in events)
+    # Gas profiling (manual):
+    # print('Gas used for transfer:', getattr(exec_info, 'actual_fee', 'N/A'))
 
 @pytest.mark.asyncio
 async def test_transfer_insufficient_balance(token_factory):
@@ -91,9 +101,14 @@ async def test_approve_and_allowance(token_factory):
     owner = 1234
     spender = 2222
     amount = Uint256(50, 0)
-    await token.approve(spender, amount).invoke(caller_address=owner)
+    exec_info = await token.approve(spender, amount).invoke(caller_address=owner)
     allowed = await token.allowanceOf(owner, spender).call()
     assert allowed.result.remaining == amount
+    # Check Approval event
+    events = exec_info.main_call_events
+    assert any(e.keys[0] == token.Approval.selector for e in events)
+    # Gas profiling (manual):
+    # print('Gas used for approve:', getattr(exec_info, 'actual_fee', 'N/A'))
 
 @pytest.mark.asyncio
 async def test_transfer_from(token_factory):
@@ -105,12 +120,17 @@ async def test_transfer_from(token_factory):
     # Approve first
     await token.approve(spender, amount).invoke(caller_address=owner)
     # Spender transfers from owner to receiver
-    await token.transferFrom(owner, receiver, amount).invoke(caller_address=spender)
+    exec_info = await token.transferFrom(owner, receiver, amount).invoke(caller_address=spender)
     bal = await token.balanceOf(receiver).call()
     assert bal.result.balance == amount
     # Allowance should be zero now
     allowed = await token.allowanceOf(owner, spender).call()
     assert allowed.result.remaining == Uint256(0, 0)
+    # Check Transfer event
+    events = exec_info.main_call_events
+    assert any(e.keys[0] == token.Transfer.selector for e in events)
+    # Gas profiling (manual):
+    # print('Gas used for transferFrom:', getattr(exec_info, 'actual_fee', 'N/A'))
 
 @pytest.mark.asyncio
 async def test_transfer_from_insufficient_allowance(token_factory):
