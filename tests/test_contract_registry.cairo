@@ -151,7 +151,7 @@ fn test_get_all_names() {
     stop_prank(CheatTarget::One(contract_address));
 }
 
-/// @notice Test comprehensive registry workflow
+/// @notice Tests comprehensive registry workflows
 #[test]
 fn test_registry_workflow() {
     let contract = declare("ContractRegistry");

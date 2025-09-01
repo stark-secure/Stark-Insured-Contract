@@ -1,6 +1,6 @@
 # Token contract tests for StarkInsuredToken
 # Test minting, transfers, balances, supply, and edge/security cases
-
+# token test
 from starkware.starknet.testing.starknet import Starknet
 from starkware.starknet.testing.contract import StarknetContract
 from starkware.cairo.common.uint256 import Uint256
