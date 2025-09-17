@@ -6,7 +6,7 @@ trait ICrossChainBridge<TContractState> {
         ref self: TContractState,
         source_chain: felt252,
         message_hash: felt252,
-        payload: Span<felt252>
+        payload: Span<felt252>,
     );
     fn is_message_processed(self: @TContractState, message_hash: felt252) -> bool;
     fn get_trusted_chains(self: @TContractState) -> Span<felt252>;
@@ -17,7 +17,7 @@ mod CrossChainBridge {
     use super::ICrossChainBridge;
     use starknet::{ContractAddress, get_caller_address, get_block_timestamp};
     use starknet::storage::{
-        StoragePointerReadAccess, StoragePointerWriteAccess, StoragePathEntry, Map
+        StoragePointerReadAccess, StoragePointerWriteAccess, StoragePathEntry, Map,
     };
 
     #[storage]
@@ -65,7 +65,7 @@ mod CrossChainBridge {
     #[constructor]
     fn constructor(ref self: ContractState, owner: ContractAddress, trusted_chains: Span<felt252>) {
         self.owner.write(owner);
-        
+
         // Initialize trusted chains (e.g., Ethereum mainnet)
         let mut i = 0;
         loop {
@@ -89,13 +89,15 @@ mod CrossChainBridge {
             ref self: ContractState,
             source_chain: felt252,
             message_hash: felt252,
-            payload: Span<felt252>
+            payload: Span<felt252>,
         ) {
             // 1. Validate source chain is trusted
             assert(self.trusted_chains.entry(source_chain).read(), 'Untrusted source chain');
 
             // 2. Replay protection - check if message already processed
-            assert(!self.processed_messages.entry(message_hash).read(), 'Message already processed');
+            assert(
+                !self.processed_messages.entry(message_hash).read(), 'Message already processed',
+            );
 
             // 3. Validate message structure
             assert(payload.len() >= 3, 'Invalid payload length');
@@ -104,10 +106,10 @@ mod CrossChainBridge {
             let policy_id = *payload.at(0);
             let user_low = *payload.at(1);
             let user_high = *payload.at(2);
-            
+
             // Reconstruct user address from low and high parts
             let user_address = starknet::contract_address_from_felt252(
-                user_low + user_high * 0x100000000000000000000000000000000
+                user_low + user_high * 0x100000000000000000000000000000000,
             );
 
             // Extract claim data (remaining payload)
@@ -126,14 +128,17 @@ mod CrossChainBridge {
 
             // 6. Emit events
             self.emit(MessageProcessed { message_hash, source_chain });
-            
-            self.emit(CrossChainClaimReceived {
-                policy_id,
-                user: user_address,
-                claim_data: claim_data.span(),
-                source_chain,
-                timestamp: get_block_timestamp(),
-            });
+
+            self
+                .emit(
+                    CrossChainClaimReceived {
+                        policy_id,
+                        user: user_address,
+                        claim_data: claim_data.span(),
+                        source_chain,
+                        timestamp: get_block_timestamp(),
+                    },
+                );
         }
 
         /// Check if a message has been processed
@@ -163,9 +168,7 @@ mod CrossChainBridge {
 
         /// Validate message signature/proof (stubbed for now)
         fn validate_message_proof(
-            self: @ContractState,
-            message_hash: felt252,
-            proof: Span<felt252>
+            self: @ContractState, message_hash: felt252, proof: Span<felt252>,
         ) -> bool {
             // TODO: Implement actual signature/proof validation
             // For now, return true (mock validation)

@@ -41,9 +41,11 @@ pub fn is_proposal_ready_for_execution(
 
     // Check if voting period ended and execution delay passed
     current_time >= end_time
-        + execution_delay &&// Check if quorum reached
-        total_votes >= crate::constants::QUORUM_THRESHOLD &&// Check if majority achieved
-        votes_for
+        + execution_delay
+            && // Check if quorum reached
+            total_votes >= crate::constants::QUORUM_THRESHOLD
+            && // Check if majority achieved
+            votes_for
             * 100 > total_votes
             * crate::constants::PROPOSAL_THRESHOLD.into()
 }

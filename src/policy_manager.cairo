@@ -53,7 +53,7 @@ mod PolicyManager {
         owner: ContractAddress,
         coverage_type: felt252,
         duration: u64,
-        asset: ContractAddress
+        asset: ContractAddress,
     ) {
         self.owner.write(owner);
         self.coverage_type.write(coverage_type);
@@ -88,25 +88,19 @@ mod PolicyManager {
         fn activate_policy(ref self: ContractState) {
             let caller = get_caller_address();
             assert(caller == self.owner.read(), 'Only owner can activate');
-            
+
             self.active.write(true);
-            
-            self.emit(PolicyActivated {
-                owner: caller,
-                timestamp: get_block_timestamp(),
-            });
+
+            self.emit(PolicyActivated { owner: caller, timestamp: get_block_timestamp() });
         }
 
         fn deactivate_policy(ref self: ContractState) {
             let caller = get_caller_address();
             assert(caller == self.owner.read(), 'Only owner can deactivate');
-            
+
             self.active.write(false);
-            
-            self.emit(PolicyDeactivated {
-                owner: caller,
-                timestamp: get_block_timestamp(),
-            });
+
+            self.emit(PolicyDeactivated { owner: caller, timestamp: get_block_timestamp() });
         }
     }
 }

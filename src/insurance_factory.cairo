@@ -8,9 +8,9 @@ trait IInsuranceFactory<TContractState> {
         coverage_type: felt252,
         duration: u64,
         asset: ContractAddress,
-        salt: felt252
+        salt: felt252,
     ) -> ContractAddress;
-    
+
     fn get_user_policies(self: @TContractState, user: ContractAddress) -> Array<ContractAddress>;
     fn get_policy_count(self: @TContractState, user: ContractAddress) -> u32;
     fn is_authorized(self: @TContractState, user: ContractAddress) -> bool;
@@ -22,8 +22,8 @@ trait IInsuranceFactory<TContractState> {
 mod InsuranceFactory {
     use super::IInsuranceFactory;
     use starknet::{
-        ContractAddress, get_caller_address, get_block_timestamp, deploy_syscall,
-        ClassHash, get_contract_address
+        ContractAddress, get_caller_address, get_block_timestamp, deploy_syscall, ClassHash,
+        get_contract_address,
     };
     use core::array::ArrayTrait;
     use core::traits::Into;
@@ -76,9 +76,7 @@ mod InsuranceFactory {
 
     #[constructor]
     fn constructor(
-        ref self: ContractState,
-        owner: ContractAddress,
-        policy_manager_class_hash: ClassHash
+        ref self: ContractState, owner: ContractAddress, policy_manager_class_hash: ClassHash,
     ) {
         self.owner.write(owner);
         self.policy_manager_class_hash.write(policy_manager_class_hash);
@@ -94,51 +92,54 @@ mod InsuranceFactory {
             coverage_type: felt252,
             duration: u64,
             asset: ContractAddress,
-            salt: felt252
+            salt: felt252,
         ) -> ContractAddress {
             let caller = get_caller_address();
-            
+
             // Security check: only authorized users can create policies
             assert(self.is_authorized(caller), 'Unauthorized user');
-            
+
             // Prepare constructor calldata for policy manager
             let mut constructor_calldata = ArrayTrait::new();
             constructor_calldata.append(owner.into());
             constructor_calldata.append(coverage_type);
             constructor_calldata.append(duration.into());
             constructor_calldata.append(asset.into());
-            
+
             // Deploy the policy manager contract
             let (policy_address, _) = deploy_syscall(
-                self.policy_manager_class_hash.read(),
-                salt,
-                constructor_calldata.span(),
-                false
-            ).expect('Failed to deploy policy');
+                self.policy_manager_class_hash.read(), salt, constructor_calldata.span(), false,
+            )
+                .expect('Failed to deploy policy');
 
             // Track the created policy
             let current_count = self.user_policy_count.read(owner);
             self.user_policy_count.write(owner, current_count + 1);
-            
+
             // Add to user's policy list (simplified storage pattern)
             let mut user_policies = self.user_policies.read(owner);
             user_policies.append(policy_address);
             self.user_policies.write(owner, user_policies);
 
             // Emit event
-            self.emit(NewPolicyCreated {
-                policy_address,
-                owner,
-                coverage_type,
-                duration,
-                asset,
-                timestamp: get_block_timestamp(),
-            });
+            self
+                .emit(
+                    NewPolicyCreated {
+                        policy_address,
+                        owner,
+                        coverage_type,
+                        duration,
+                        asset,
+                        timestamp: get_block_timestamp(),
+                    },
+                );
 
             policy_address
         }
 
-        fn get_user_policies(self: @ContractState, user: ContractAddress) -> Array<ContractAddress> {
+        fn get_user_policies(
+            self: @ContractState, user: ContractAddress,
+        ) -> Array<ContractAddress> {
             self.user_policies.read(user)
         }
 
@@ -153,25 +154,19 @@ mod InsuranceFactory {
         fn add_authorized_user(ref self: ContractState, user: ContractAddress) {
             let caller = get_caller_address();
             assert(caller == self.owner.read(), 'Only owner can authorize');
-            
+
             self.authorized_users.write(user, true);
-            
-            self.emit(UserAuthorized {
-                user,
-                timestamp: get_block_timestamp(),
-            });
+
+            self.emit(UserAuthorized { user, timestamp: get_block_timestamp() });
         }
 
         fn remove_authorized_user(ref self: ContractState, user: ContractAddress) {
             let caller = get_caller_address();
             assert(caller == self.owner.read(), 'Only owner can deauthorize');
-            
+
             self.authorized_users.write(user, false);
-            
-            self.emit(UserDeauthorized {
-                user,
-                timestamp: get_block_timestamp(),
-            });
+
+            self.emit(UserDeauthorized { user, timestamp: get_block_timestamp() });
         }
     }
 }

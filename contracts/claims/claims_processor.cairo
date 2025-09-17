@@ -74,7 +74,7 @@ mod ClaimsProcessor {
             ref self: ContractState, policy_id: u256, claim_amount: u256, evidence_hash: felt252,
         ) -> u256 {
             self.only_unpaused();
-            
+
             let caller = get_caller_address();
 
             assert(self.can_submit_claim(caller), ClaimErrors::CLAIM_COOLDOWN_ACTIVE);

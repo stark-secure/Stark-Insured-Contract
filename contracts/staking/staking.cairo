@@ -35,7 +35,10 @@ mod Staking {
         RewardClaimed { user: ContractAddress, amount: u256 },
     }
 
-    // --- Constructor ---
+    /// @notice Initializes the staking contract with pool token and treasury
+    /// @dev Sets up the staking contract with necessary addresses and initializes total staked to 0
+    /// @param pool_token The ERC20 token address used for staking
+    /// @param treasury The treasury address that receives penalties
     #[constructor]
     fn constructor(ref self: ContractState, pool_token: ContractAddress, treasury: ContractAddress) {
         self.pool_token.write(pool_token);
@@ -43,8 +46,10 @@ mod Staking {
         self.total_staked.write(0);
     }
 
-    /// @notice Stake tokens into the pool
-    /// @param amount Amount to stake
+    /// @notice Stakes tokens into the pool to earn rewards
+    /// @dev Transfers tokens from user to contract and records stake timestamp
+    /// @param amount Amount of tokens to stake (must be > 0)
+    #[external]
     fn stake(ref self: ContractState, amount: u256) {
         assert(amount > 0, 'Amount must be > 0');
         let caller = get_caller_address();
@@ -55,11 +60,80 @@ mod Staking {
         self.user_stake.write(caller, prev + amount);
         self.user_stake_timestamp.write(caller, get_block_timestamp());
         let total = self.total_staked.read();
-        self.total_staked.write(total + amount);
+        self.total_staked.write(total - amount);
+        self.emit(Event::Unstaked { user: caller, amount: withdraw_amount, penalty });
+    }
+
+    /// @notice Claims accumulated staking rewards based on time staked and APR
+    /// @dev Calculates rewards using 10% APR and time elapsed since staking
+    #[external]
+    fn claim_rewards(ref self: ContractState) {
+        let caller = get_caller_address();
+        let amount = self.user_stake.read(caller);
+        assert(amount > 0, 'No stake');
+        let staked_at = self.user_stake_timestamp.read(caller);
+        let now = get_block_timestamp();
+        let elapsed = now - staked_at;
+        let reward = (amount * APR.into() * elapsed.into()) / (100u128.into() * SECONDS_PER_YEAR.into());
+        let claimed = self.user_rewards_claimed.read(caller);
+        let claimable = reward - claimed;
+        assert(claimable > 0, 'No rewards');
+        let token = IERC20Dispatcher { contract_address: self.pool_token.read() };
+        let _ = token.transfer(caller, claimable);
+        self.user_rewards_claimed.write(caller, claimed + claimable);
+        self.emit(Event::RewardClaimed { user: caller, amount: claimable });
+    }
+
+    /// @notice Returns the total amount of tokens staked in the contract
+    /// @return The total staked amount across all users
+    #[view]
+    fn get_total_staked(self: @ContractState) -> u256 {
+        self.total_staked.read()
+    }
+
+    /// @notice Returns the staked amount for a specific user
+    /// @param user The address to check the stake for
+    /// @return The amount of tokens staked by the user
+    #[view]
+    fn get_user_stake(self: @ContractState, user: ContractAddress) -> u256 {
+        self.user_stake.read(user)
+    }
+
+    /// @notice Returns the timestamp when a user last staked
+    /// @param user The address to check the stake timestamp for
+    /// @return The timestamp of the user's last stake
+    #[view]
+    fn get_user_stake_timestamp(self: @ContractState, user: ContractAddress) -> u64 {
+        self.user_stake_timestamp.read(user)
+    }
+
+    /// @notice Calculates the pending rewards for a user without claiming
+    /// @param user The address to calculate pending rewards for
+    /// @return The amount of unclaimed rewards
+    #[view]
+    fn get_pending_rewards(self: @ContractState, user: ContractAddress) -> u256 {
+        let amount = self.user_stake.read(user);
+        if amount == 0 {
+            return 0;
+        }
+        let staked_at = self.user_stake_timestamp.read(user);
+        let now = get_block_timestamp();
+        let elapsed = now - staked_at;
+        let reward = (amount * APR.into() * elapsed.into()) / (100u128.into() * SECONDS_PER_YEAR.into());
+        let claimed = self.user_rewards_claimed.read(user);
+        if reward > claimed {
+            reward - claimed
+        } else {
+            0
+        }
+    }
+}write(total + amount);
         self.emit(Event::Staked { user: caller, amount });
     }
 
-    /// @notice Unstake tokens, applies penalty if before lockup ends
+    /// @notice Unstakes all user tokens, applies penalty if before lockup period ends
+    /// @dev Calculates penalty if unstaking before 7-day lockup period and transfers tokens back
+    #[external]
     fn unstake(ref self: ContractState) {
         let caller = get_caller_address();
         let amount = self.user_stake.read(caller);
@@ -79,25 +153,4 @@ mod Staking {
         self.user_stake.write(caller, 0);
         self.user_stake_timestamp.write(caller, 0);
         let total = self.total_staked.read();
-        self.total_staked.write(total - amount);
-        self.emit(Event::Unstaked { user: caller, amount: withdraw_amount, penalty });
-    }
-
-    /// @notice Claim staking rewards
-    fn claim_rewards(ref self: ContractState) {
-        let caller = get_caller_address();
-        let amount = self.user_stake.read(caller);
-        assert(amount > 0, 'No stake');
-        let staked_at = self.user_stake_timestamp.read(caller);
-        let now = get_block_timestamp();
-        let elapsed = now - staked_at;
-        let reward = (amount * APR.into() * elapsed.into()) / (100u128.into() * SECONDS_PER_YEAR.into());
-        let claimed = self.user_rewards_claimed.read(caller);
-        let claimable = reward - claimed;
-        assert(claimable > 0, 'No rewards');
-        let token = IERC20Dispatcher { contract_address: self.pool_token.read() };
-        let _ = token.transfer(caller, claimable);
-        self.user_rewards_claimed.write(caller, claimed + claimable);
-        self.emit(Event::RewardClaimed { user: caller, amount: claimable });
-    }
-}
+        self.total_staked.
