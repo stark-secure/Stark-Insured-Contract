@@ -2,7 +2,7 @@
 mod DAOGovernance {
     use openzeppelin::access::ownable::OwnableComponent;
     use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
-    use stark_insured::errors::GovernanceErrors;  
+    use stark_insured::errors::GovernanceErrors;
     use stark_insured::events::{ProposalCreated, ProposalExecuted, VoteCast};
     use stark_insured::interfaces::{IDAOGovernance, Proposal, IPauseable};
     use stark_insured::{constants, utils};
@@ -63,7 +63,7 @@ mod DAOGovernance {
             execution_data: Span<felt252>,
         ) -> u256 {
             self.only_unpaused();
-            
+
             let caller = get_caller_address();
             let voting_power = self.get_voting_power(caller);
 
@@ -96,7 +96,7 @@ mod DAOGovernance {
 
         fn vote(ref self: ContractState, proposal_id: u256, support: bool, voting_power: u256) {
             self.only_unpaused();
-            
+
             let caller = get_caller_address();
             let proposal = self.get_proposal(proposal_id);
 
@@ -124,7 +124,7 @@ mod DAOGovernance {
 
         fn execute_proposal(ref self: ContractState, proposal_id: u256) {
             self.only_unpaused();
-            
+
             let proposal = self.get_proposal(proposal_id);
             assert(!proposal.executed, GovernanceErrors::ALREADY_EXECUTED);
 

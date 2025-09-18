@@ -51,6 +51,10 @@ mod RiskPool {
     #[derive(Drop, starknet::Event)]
     struct Unpaused {}
 
+    /// @notice Initializes the risk pool contract with owner and pool token
+    /// @dev Sets up ownable component and initializes storage variables
+    /// @param owner The address that will own this contract
+    /// @param pool_token The ERC20 token address used for pool operations
     #[constructor]
     fn constructor(ref self: ContractState, owner: ContractAddress, pool_token: ContractAddress) {
         self.ownable.initializer(owner);
@@ -61,17 +65,22 @@ mod RiskPool {
 
     #[abi(embed_v0)]
     impl RiskPoolImpl of IRiskPool<ContractState> {
-        /// @view
-        /// Returns the claimable amount for a user based on policy status, oracle event, and pool liquidity.
+        /// @notice Calculates the claimable amount for a user based on policy status and pool
+        /// liquidity @dev Checks policy activity, oracle events, and applies pool balance caps
+        /// @param user The address of the user to check claimable amount for
+        /// @return The amount that can be claimed by the user
         #[view]
         fn claimable_amount(self: @ContractState, user: ContractAddress) -> u256 {
             // --- 1. Check if user has an active policy ---
             // For demo: Assume policy_id == 1 for user (in real, would map user to policy_id)
-            let policy_manager_addr = 0; // TODO: Set actual PolicyManager address or fetch from registry
+            let policy_manager_addr =
+                0; // TODO: Set actual PolicyManager address or fetch from registry
             if policy_manager_addr == 0 {
                 return 0;
             }
-            let policy_manager = stark_insured::interfaces::IPolicyManagerDispatcher { contract_address: policy_manager_addr };
+            let policy_manager = stark_insured::interfaces::IPolicyManagerDispatcher {
+                contract_address: policy_manager_addr,
+            };
             let policy_id = 1; // TODO: Replace with actual lookup
             let is_active = policy_manager.is_policy_active(policy_id);
             if !is_active {
@@ -93,11 +102,19 @@ mod RiskPool {
 
             // --- 4. Cap payout by pool balance ---
             let pool_balance = self.total_balance.read();
-            let claimable = if payout > pool_balance { pool_balance } else { payout };
+            let claimable = if payout > pool_balance {
+                pool_balance
+            } else {
+                payout
+            };
 
             // --- 5. Cap per user/global limits (optional, add logic as needed) ---
             claimable
         }
+
+        /// @notice Allows users to deposit tokens into the risk pool
+        /// @dev Requires contract to be unpaused and uses reentrancy protection
+        /// @param amount The amount of tokens to deposit (must be > 0)
         fn deposit(ref self: ContractState, amount: u256) {
             self.only_unpaused();
             assert(amount > 0, PoolErrors::INVALID_AMOUNT);
@@ -121,6 +138,9 @@ mod RiskPool {
             self.reentrancy_guard.end();
         }
 
+        /// @notice Allows users to withdraw their deposited tokens from the pool
+        /// @dev Requires contract to be unpaused and sufficient user balance
+        /// @param amount The amount of tokens to withdraw (must be > 0)
         fn withdraw(ref self: ContractState, amount: u256) {
             self.only_unpaused();
             assert(amount > 0, PoolErrors::INVALID_AMOUNT);
@@ -146,14 +166,23 @@ mod RiskPool {
             self.reentrancy_guard.end();
         }
 
+        /// @notice Returns the total balance of tokens in the pool
+        /// @return The total amount of tokens held by the pool
         fn get_balance(self: @ContractState) -> u256 {
             self.total_balance.read()
         }
 
+        /// @notice Returns the balance of a specific user in the pool
+        /// @param user The address to check the balance for
+        /// @return The amount of tokens deposited by the user
         fn get_user_balance(self: @ContractState, user: ContractAddress) -> u256 {
             self.user_balances.read(user)
         }
 
+        /// @notice Calculates a basic risk score for a user
+        /// @dev Uses claim history and deposit amount to determine risk
+        /// @param user The address to calculate risk score for
+        /// @return The calculated risk score as a u256 value
         fn calculate_risk_score(self: @ContractState, user: ContractAddress) -> u256 {
             let claim_history = self.user_claim_history.read(user);
             let deposit_amount = self.user_balances.read(user);
@@ -161,9 +190,13 @@ mod RiskPool {
             utils::calculate_risk_score_basic(claim_history, deposit_amount)
         }
 
+        /// @notice Processes insurance payouts to recipients
+        /// @dev Only authorized processors or owner can call this function
+        /// @param recipient The address to receive the payout
+        /// @param amount The amount to pay out (must not exceed pool balance)
         fn process_payout(ref self: ContractState, recipient: ContractAddress, amount: u256) {
             self.only_unpaused();
-            
+
             let caller = get_caller_address();
             assert(
                 self.authorized_processors.read(caller) || caller == self.ownable.owner(),
@@ -190,6 +223,8 @@ mod RiskPool {
 
     #[abi(embed_v0)]
     impl PauseableImpl of IPauseable<ContractState> {
+        /// @notice Pauses the contract, preventing most operations
+        /// @dev Only owner can pause, contract must not already be paused
         fn pause(ref self: ContractState) {
             self.ownable.assert_only_owner();
             assert(!self.paused.read(), 'Already paused');
@@ -197,6 +232,8 @@ mod RiskPool {
             self.emit(Paused {});
         }
 
+        /// @notice Unpauses the contract, allowing normal operations
+        /// @dev Only owner can unpause, contract must be paused
         fn unpause(ref self: ContractState) {
             self.ownable.assert_only_owner();
             assert(self.paused.read(), 'Not paused');
@@ -204,6 +241,8 @@ mod RiskPool {
             self.emit(Unpaused {});
         }
 
+        /// @notice Checks if the contract is currently paused
+        /// @return True if paused, false otherwise
         fn is_paused(self: @ContractState) -> bool {
             self.paused.read()
         }
@@ -211,15 +250,23 @@ mod RiskPool {
 
     #[generate_trait]
     impl InternalImpl of InternalTrait {
+        /// @notice Internal function to ensure contract is not paused
+        /// @dev Reverts with error message if contract is paused
         fn only_unpaused(self: @ContractState) {
             assert(!self.paused.read(), 'Contract is paused');
         }
 
+        /// @notice Authorizes a processor to handle payouts
+        /// @dev Only owner can authorize processors
+        /// @param processor The address to authorize
         fn authorize_processor(ref self: ContractState, processor: ContractAddress) {
             self.ownable.assert_only_owner();
             self.authorized_processors.write(processor, true);
         }
 
+        /// @notice Revokes processor authorization
+        /// @dev Only owner can revoke processor authorization
+        /// @param processor The address to revoke authorization from
         fn revoke_processor(ref self: ContractState, processor: ContractAddress) {
             self.ownable.assert_only_owner();
             self.authorized_processors.write(processor, false);

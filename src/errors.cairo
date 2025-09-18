@@ -47,5 +47,5 @@ pub mod RegistryErrors {
     pub const INVALID_CONTRACT_ADDRESS: felt252 = 'Invalid contract address';
     pub const UNAUTHORIZED_ACCESS: felt252 = 'Unauthorized access';
 }
-
 // Remove the duplicate RegistryErrors module at the end
+
